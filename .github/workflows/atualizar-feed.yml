@@ -19,14 +19,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Gerar feed complementar
-        run: python scripts/gerar_feed_complementar.py
+      - name: Gerar feed enriquecido
+        run: python scripts/gerar_feed_enriquecido.py
 
       - name: Commitar se houver mudanças
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/pinterest_complementar.csv
+          git add data/feed_pinterest.xml
           if git diff --cached --quiet; then
             echo "Sem mudanças no feed."
           else
