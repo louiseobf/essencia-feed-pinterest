@@ -1,0 +1,35 @@
+name: Atualizar feed complementar Pinterest
+
+on:
+  schedule:
+    # 08:00 UTC = 05:00 Brasília, depois da atualização diária do feed Yampi (~03:42)
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Gerar feed complementar
+        run: python scripts/gerar_feed_complementar.py
+
+      - name: Commitar se houver mudanças
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/pinterest_complementar.csv
+          if git diff --cached --quiet; then
+            echo "Sem mudanças no feed."
+          else
+            git commit -m "Atualiza feed complementar ($(date -u +%Y-%m-%d))"
+            git push
+          fi
