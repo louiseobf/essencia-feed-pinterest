@@ -89,6 +89,58 @@ def injetar(m: re.Match) -> str:
     )
 
 
+RE_LINK = re.compile(r"<link>(.*?)</link>", re.S)
+RE_IMAGE = re.compile(r"<g:image_link>(.*?)</g:image_link>", re.S)
+
+
+def _status(url: str) -> int:
+    """HTTP status da imagem; 0 para erro de rede (tratado como OK, por segurança)."""
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except Exception:
+        return 0
+
+
+def corrigir_imagens(original: str) -> tuple[str, int]:
+    """Substitui image_link quebrado (4xx definitivo) pela imagem OK de outra
+    variação do mesmo produto (mesmo <link>). Alguns SKUs antigos apontam para
+    arquivos removidos do servidor da Yampi; sem essa troca o Pinterest exclui
+    o produto do catálogo (erro 1202)."""
+    import concurrent.futures
+
+    itens = re.findall(r"<item>.*?</item>", original, flags=re.S)
+    pares = []
+    for it in itens:
+        link = RE_LINK.search(it)
+        img = RE_IMAGE.search(it)
+        if link and img:
+            pares.append((link.group(1).strip(), img.group(1).strip()))
+
+    urls = sorted({img for _, img in pares})
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+        status = dict(zip(urls, ex.map(_status, urls)))
+
+    ok_por_produto: dict[str, str] = {}
+    for link, img in pares:
+        if link not in ok_por_produto and status.get(img) == 200:
+            ok_por_produto[link] = img
+
+    trocas = 0
+    for link, img in pares:
+        st = status.get(img, 0)
+        if 400 <= st < 500 and link in ok_por_produto:
+            original = original.replace(
+                f"<g:image_link>{img}</g:image_link>",
+                f"<g:image_link>{ok_por_produto[link]}</g:image_link>",
+            )
+            trocas += 1
+    return original, trocas
+
+
 def main() -> None:
     req = urllib.request.Request(FEED_URL, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=180) as resp:
@@ -97,6 +149,9 @@ def main() -> None:
     itens = original.count("<item>")
     if itens < 1000:
         raise SystemExit(f"Feed suspeito: só {itens} itens — abortando sem sobrescrever.")
+
+    original, trocas = corrigir_imagens(original)
+    print(f"{trocas} imagens quebradas substituídas por imagem do mesmo produto")
 
     enriquecido, n = re.subn(r"<item>.*?</item>", injetar, original, flags=re.S)
     if n != itens:

@@ -30,6 +30,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Sem mudanças no feed."
           else
-            git commit -m "Atualiza feed complementar ($(date -u +%Y-%m-%d))"
+            git commit -m "Atualiza feed Pinterest ($(date -u +%Y-%m-%d))"
             git push
           fi
